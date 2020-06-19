@@ -1,10 +1,14 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
-	"log"
+	"io"
+	"os"
 	"path/filepath"
 
+	"github.com/ebozkurt93/nextcloud-file-sync/nextcloud"
+	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -24,20 +28,48 @@ type config struct {
 
 func main() {
 	c, err := getConfig()
+	red := color.New(color.FgRed)
 	if err != nil {
-		log.Fatal(err)
+		red.Println(err)
+		return
 	}
-	fmt.Printf("%#+v\n", c)
+
 	if c.upload == c.download {
-		log.Fatal("Only upload or download should be selected")
+		red.Println("Only upload or download should be selected")
+		return
 	}
 	localFilePath := filepath.Join(c.localFolderPath, c.localFileName)
-	fmt.Println(localFilePath)
-
+	nc := nextcloud.Config{HostURL: c.hostURL, Username: c.username, Password: c.password}
+	currentDir, err := os.Getwd()
+	if err != nil {
+		red.Println(err)
+		return
+	}
+	tempFolderName := filepath.Join(currentDir, "temp", generateRandomName())
+	// Create a temporary directory
+	if err := os.MkdirAll(tempFolderName, os.ModePerm); err != nil {
+		red.Println(err)
+		return
+	}
+	defer os.RemoveAll(tempFolderName)
 	if c.download {
-		log.Println("Downloading...")
+		color.Green("Downloading nextcloud file %s from nextcloud path %s to local directory %s\n", c.ncFileName, c.ncFolderPath, localFilePath)
+		if err := nc.DownloadFile(c.ncFolderPath, c.ncFileName, tempFolderName); err != nil {
+			red.Println(err)
+			return
+		}
+		if err := os.Rename(filepath.Join(tempFolderName, c.ncFileName), localFilePath); err != nil {
+			red.Println(err)
+			return
+		}
+		color.Green("Download successful")
 	} else if c.upload {
-		log.Println("Uploading...")
+		ncPath := filepath.Join(c.ncFolderPath, c.ncFileName)
+		color.Green("Uploading local file %s from local path %s to nextcloud directory %s\n", c.localFileName, c.localFolderPath, ncPath)
+		tempFilePath := filepath.Join(tempFolderName, c.ncFileName)
+		copyFile(localFilePath, tempFilePath)
+		nc.UploadFile(c.ncFolderPath, c.ncFileName, tempFilePath)
+		color.Green("Upload successful")
 	}
 }
 
@@ -45,13 +77,13 @@ func main() {
 func getConfig() (config, error) {
 	v := viper.New()
 	// Support reading file & folder paths for nextcloud and local from flags
-	pflag.String("nc_folder_path", "asda", "nextcloud folder path")
+	pflag.String("nc_folder_path", "", "nextcloud folder path")
 	v.BindPFlag("nc_folder_path", pflag.Lookup("nc_folder_path"))
-	pflag.String("nc_file_path", "asda", "nextcloud file path")
+	pflag.String("nc_file_path", "", "nextcloud file path")
 	v.BindPFlag("nc_file_path", pflag.Lookup("nc_file_path"))
-	pflag.String("local_folder_path", "asda", "local folder path")
+	pflag.String("local_folder_path", "", "local folder path")
 	v.BindPFlag("local_folder_path", pflag.Lookup("local_folder_path"))
-	pflag.String("local_file_path", "asda", "local file path")
+	pflag.String("local_file_path", "", "local file path")
 	v.BindPFlag("local_file_path", pflag.Lookup("local_file_path"))
 
 	pflag.Bool("d", false, "download from nextcloud server")
@@ -81,4 +113,37 @@ func getConfig() (config, error) {
 		upload:          v.GetBool("u"),
 	}
 	return c, nil
+}
+
+func generateRandomName() string {
+	n := 5
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	s := fmt.Sprintf("%X", b)
+	return s
+}
+
+func copyFile(src, dest string) error {
+	// Open original file
+	original, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer original.Close()
+
+	// Create new file
+	new, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer new.Close()
+
+	//This will copy
+	_, err = io.Copy(new, original)
+	if err != nil {
+		return err
+	}
+	return nil
 }
