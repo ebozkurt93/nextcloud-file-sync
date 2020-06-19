@@ -79,12 +79,12 @@ func getConfig() (config, error) {
 	// Support reading file & folder paths for nextcloud and local from flags
 	pflag.String("nc_folder_path", "", "nextcloud folder path")
 	v.BindPFlag("nc_folder_path", pflag.Lookup("nc_folder_path"))
-	pflag.String("nc_file_path", "", "nextcloud file path")
-	v.BindPFlag("nc_file_path", pflag.Lookup("nc_file_path"))
+	pflag.String("nc_file_name", "", "nextcloud file name")
+	v.BindPFlag("nc_file_name", pflag.Lookup("nc_file_name"))
 	pflag.String("local_folder_path", "", "local folder path")
 	v.BindPFlag("local_folder_path", pflag.Lookup("local_folder_path"))
-	pflag.String("local_file_path", "", "local file path")
-	v.BindPFlag("local_file_path", pflag.Lookup("local_file_path"))
+	pflag.String("local_file_name", "", "local file name")
+	v.BindPFlag("local_file_name", pflag.Lookup("local_file_name"))
 
 	pflag.Bool("d", false, "download from nextcloud server")
 	v.BindPFlag("d", pflag.Lookup("d"))
